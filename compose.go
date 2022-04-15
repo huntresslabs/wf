@@ -300,7 +300,7 @@ func toValue0(a *arena, v interface{}, ftype reflect.Type) (typ dataType, val ui
 			if !m.Valid() {
 				return 0, 0, fmt.Errorf("invalid IPRange %v", m)
 			}
-			r, err := toRange0(a, Range{m.From, m.To}, ftype)
+			r, err := toRange0(a, Range{m.From(), m.To()}, ftype)
 			if err != nil {
 				return 0, 0, err
 			}
