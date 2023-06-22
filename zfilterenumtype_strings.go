@@ -8,16 +8,16 @@ func _() {
 	// An "invalid array index" compiler error signifies that the constant values have changed.
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
-	_ = x[filterEnumTypeFullyContained-0]
-	_ = x[filterEnumTypeOverlapping-1]
+	_ = x[FilterEnumTypeFullyContained-0]
+	_ = x[FilterEnumTypeOverlapping-1]
 }
 
 const _filterEnumType_name = "FullyContainedOverlapping"
 
 var _filterEnumType_index = [...]uint8{0, 14, 25}
 
-func (i filterEnumType) String() string {
-	if i >= filterEnumType(len(_filterEnumType_index)-1) {
+func (i FilterEnumType) String() string {
+	if i >= FilterEnumType(len(_filterEnumType_index)-1) {
 		return "filterEnumType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _filterEnumType_name[_filterEnumType_index[i]:_filterEnumType_index[i+1]]
