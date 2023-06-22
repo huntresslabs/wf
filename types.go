@@ -249,11 +249,12 @@ const (
 type FilterEnumFlags uint32
 
 const (
-	FilterEnumFlagsBestTerminatingMatch FilterEnumFlags = iota + 1
-	FilterEnumFlagsSorted
-	FilterEnumFlagsBootTimeOnly
-	FilterEnumFlagsIncludeBootTime
-	FilterEnumFlagsIncludeDisabled
+	FilterEnumFlagsBestTerminatingMatch FilterEnumFlags = 0x01
+	FilterEnumFlagsSorted                               = 0x02
+	FilterEnumFlagsBootTimeOnly                         = 0x04
+	FilterEnumFlagsIncludeBootTime                      = 0x08
+	FilterEnumFlagsIncludeDisabled                      = 0x10
+	FilterEnumFlagsReserved1                            = 0x20
 )
 
 type fwpIPVersion uint32
