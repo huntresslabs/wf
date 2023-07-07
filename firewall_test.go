@@ -5,7 +5,6 @@
 package wf
 
 import (
-	"fmt"
 	"os"
 	"sort"
 	"testing"
