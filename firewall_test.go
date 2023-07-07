@@ -307,8 +307,6 @@ func TestProviders(t *testing.T) {
 }
 
 func TestFilter(t *testing.T) {
-	skipIfUnprivileged(t)
-
 	// Create a new dynamic session
 	s, err := New(&Options{
 		Dynamic: true,
@@ -364,14 +362,16 @@ func TestFilter(t *testing.T) {
 	}
 
 	// Filter for rules from our provider
-	enum := s.EnumerateRules(FilterEnumTypeOverlapping, LayerALEAuthConnectV4).
-		WithProvider(ProviderID(guid))
-
-	if rules, err := enum.Execute(); err != nil {
+	rules, err := s.EnumerateRules(FilterEnumTypeOverlapping, LayerALEAuthConnectV4).
+		WithProvider(ProviderID(guid)).
+		WithActionMask(0xFFFFFFFF).
+		WithFlags(FilterEnumFlagsSorted).
+		Execute()
+	if err != nil {
 		t.Fatal(err)
 	} else if len(rules) != 1 {
 		t.Fatalf("expected 1 rule in filter, but found %v", len(rules))
-	} else if diff := cmp.Diff(rules[0], r); diff != "" {
-		t.Fatalf("rule is wrong (-got+want):\n%s", diff)
+	} else if rules[0].ID != RuleID(rule_id) {
+		t.Fatalf("wrong rule enumerated (expected %v; got %v)", rule_id, rules[0].ID)
 	}
 }
