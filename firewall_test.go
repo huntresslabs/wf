@@ -5,6 +5,7 @@
 package wf
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"testing"
@@ -302,5 +303,75 @@ func TestProviders(t *testing.T) {
 		if got.ID == p.ID {
 			t.Fatalf("deleted provider but it's still there: %#v", got)
 		}
+	}
+}
+
+func TestFilter(t *testing.T) {
+	skipIfUnprivileged(t)
+
+	// Create a new dynamic session
+	s, err := New(&Options{
+		Dynamic: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	guid, err := windows.GenerateGUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new provider
+	p := &Provider{
+		ID:          ProviderID(guid),
+		Name:        "test provider",
+		Description: "a test provider",
+		Data:        []byte("byte blob"),
+	}
+	if err := s.AddProvider(p); err != nil {
+		t.Fatalf("add provider failed: %v", err)
+	}
+
+	rule_id, err := windows.GenerateGUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a rule so we can test enumeration
+	r := Rule{
+		ID:          RuleID(rule_id),
+		Name:        "inetaf-wf-test-rule",
+		Description: "A disabled rule for testing the inet.af/wf library",
+		Layer:       LayerALEAuthConnectV4,
+		Weight:      0x4242,
+		Conditions: []*Match{
+			{
+				Field: FieldALEAppID,
+				Op:    MatchTypeEqual,
+				Value: "test",
+			},
+		},
+		Action:     ActionPermit,
+		Persistent: false,
+		BootTime:   false,
+		Provider:   ProviderID(guid),
+		Disabled:   true,
+	}
+	if err := s.AddRule(&r); err != nil {
+		t.Fatal(err)
+	}
+
+	// Filter for rules from our provider
+	enum := s.EnumerateRules(FilterEnumTypeOverlapping, LayerALEAuthConnectV4).
+		WithProvider(ProviderID(guid))
+
+	if rules, err := enum.Execute(); err != nil {
+		t.Fatal(err)
+	} else if len(rules) != 1 {
+		t.Fatalf("expected 1 rule in filter, but found %v", len(rules))
+	} else if diff := cmp.Diff(rules[0], r); diff != "" {
+		t.Fatalf("rule is wrong (-got+want):\n%s", diff)
 	}
 }
