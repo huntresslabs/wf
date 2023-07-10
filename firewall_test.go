@@ -363,7 +363,7 @@ func TestFilter(t *testing.T) {
 	// Filter for rules from our provider
 	rules, err := s.EnumerateRules(FilterEnumTypeOverlapping, LayerALEAuthConnectV4).
 		WithProvider(ProviderID(guid)).
-		WithActionMask(0xFFFFFFFF).
+		WithActionMask(ActionFlagIgnore).
 		WithFlags(FilterEnumFlagsSorted).
 		Execute()
 	if err != nil {

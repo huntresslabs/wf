@@ -224,14 +224,14 @@ type fwpmProviderContextEnumTemplate0 struct {
 //go:notinheap
 type fwpmFilterEnumTemplate0 struct {
 	ProviderKey             *ProviderID
-	LayerKey                windows.GUID
+	LayerKey                LayerID
 	EnumType                FilterEnumType
 	Flags                   FilterEnumFlags
 	ProviderContextTemplate *fwpmProviderContextEnumTemplate0 // TODO: wtf?
 	NumConditions           uint32
 	Conditions              *fwpmFilterCondition0
-	ActionMask              uint32
-	CalloutKey              *windows.GUID
+	ActionMask              ActionFlag
+	CalloutKey              *CalloutID
 }
 
 //go:notinheap

@@ -10,13 +10,12 @@ type RuleEnumerator struct {
 }
 
 func (e RuleEnumerator) WithProvider(provider ProviderID) RuleEnumerator {
-	e.enumTemplate.ProviderKey = new(ProviderID)
-	*e.enumTemplate.ProviderKey = provider
+	e.enumTemplate.ProviderKey = &provider
 	return e
 }
 
 func (e RuleEnumerator) WithLayer(layer LayerID) RuleEnumerator {
-	e.enumTemplate.LayerKey = windows.GUID(layer)
+	e.enumTemplate.LayerKey = layer
 	return e
 }
 
@@ -40,14 +39,13 @@ func (e RuleEnumerator) WithProviderContext(provider ProviderID, contextType uin
 	return e
 }
 
-func (e RuleEnumerator) WithActionMask(mask Action) RuleEnumerator {
-	e.enumTemplate.ActionMask = uint32(mask)
+func (e RuleEnumerator) WithActionMask(mask ActionFlag) RuleEnumerator {
+	e.enumTemplate.ActionMask = mask
 	return e
 }
 
 func (e RuleEnumerator) WithCalloutKey(key CalloutID) RuleEnumerator {
-	e.enumTemplate.CalloutKey = new(windows.GUID)
-	*e.enumTemplate.CalloutKey = windows.GUID(key)
+	e.enumTemplate.CalloutKey = &key
 	return e
 }
 
@@ -79,7 +77,7 @@ func (s *Session) EnumerateRules(typ FilterEnumType, layer LayerID) RuleEnumerat
 		session: s,
 		enumTemplate: fwpmFilterEnumTemplate0{
 			EnumType: typ,
-			LayerKey: windows.GUID(layer),
+			LayerKey: layer,
 		},
 	}
 }
