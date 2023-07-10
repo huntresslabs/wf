@@ -167,6 +167,7 @@ type fwpmAction0 struct {
 // fwpmFilter0 is the Go representation of FWPM_FILTER0,
 // which stores the state associated with a filter.
 // See https://docs.microsoft.com/en-us/windows/win32/api/fwpmtypes/ns-fwpmtypes-fwpm_filter0
+//
 //go:notinheap
 type fwpmFilter0 struct {
 	FilterKey           RuleID
@@ -223,14 +224,14 @@ type fwpmProviderContextEnumTemplate0 struct {
 //go:notinheap
 type fwpmFilterEnumTemplate0 struct {
 	ProviderKey             *ProviderID
-	LayerKey                windows.GUID
-	EnumType                filterEnumType
-	Flags                   filterEnumFlags
+	LayerKey                LayerID
+	EnumType                FilterEnumType
+	Flags                   FilterEnumFlags
 	ProviderContextTemplate *fwpmProviderContextEnumTemplate0 // TODO: wtf?
 	NumConditions           uint32
 	Conditions              *fwpmFilterCondition0
-	ActionMask              uint32
-	CalloutKey              *windows.GUID
+	ActionMask              ActionFlag
+	CalloutKey              *CalloutID
 }
 
 //go:notinheap
@@ -238,21 +239,22 @@ type fwpRange0 struct {
 	From, To fwpValue0
 }
 
-type filterEnumType uint32
+type FilterEnumType uint32
 
 const (
-	filterEnumTypeFullyContained filterEnumType = iota
-	filterEnumTypeOverlapping
+	FilterEnumTypeFullyContained FilterEnumType = iota
+	FilterEnumTypeOverlapping
 )
 
-type filterEnumFlags uint32
+type FilterEnumFlags uint32
 
 const (
-	filterEnumFlagsBestTerminatingMatch filterEnumFlags = iota + 1
-	filterEnumFlagsSorted
-	filterEnumFlagsBootTimeOnly
-	filterEnumFlagsIncludeBootTime
-	filterEnumFlagsIncludeDisabled
+	FilterEnumFlagsBestTerminatingMatch FilterEnumFlags = 0x01
+	FilterEnumFlagsSorted                               = 0x02
+	FilterEnumFlagsBootTimeOnly                         = 0x04
+	FilterEnumFlagsIncludeBootTime                      = 0x08
+	FilterEnumFlagsIncludeDisabled                      = 0x10
+	FilterEnumFlagsReserved1                            = 0x20
 )
 
 type fwpIPVersion uint32

@@ -304,3 +304,73 @@ func TestProviders(t *testing.T) {
 		}
 	}
 }
+
+func TestFilter(t *testing.T) {
+	// Create a new dynamic session
+	s, err := New(&Options{
+		Dynamic: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	guid, err := windows.GenerateGUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a new provider
+	p := &Provider{
+		ID:          ProviderID(guid),
+		Name:        "test provider",
+		Description: "a test provider",
+		Data:        []byte("byte blob"),
+	}
+	if err := s.AddProvider(p); err != nil {
+		t.Fatalf("add provider failed: %v", err)
+	}
+
+	rule_id, err := windows.GenerateGUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a rule so we can test enumeration
+	r := Rule{
+		ID:          RuleID(rule_id),
+		Name:        "inetaf-wf-test-rule",
+		Description: "A disabled rule for testing the inet.af/wf library",
+		Layer:       LayerALEAuthConnectV4,
+		Weight:      0x4242,
+		Conditions: []*Match{
+			{
+				Field: FieldALEAppID,
+				Op:    MatchTypeEqual,
+				Value: "test",
+			},
+		},
+		Action:     ActionPermit,
+		Persistent: false,
+		BootTime:   false,
+		Provider:   ProviderID(guid),
+		Disabled:   true,
+	}
+	if err := s.AddRule(&r); err != nil {
+		t.Fatal(err)
+	}
+
+	// Filter for rules from our provider
+	rules, err := s.EnumerateRules(FilterEnumTypeOverlapping, LayerALEAuthConnectV4).
+		WithProvider(ProviderID(guid)).
+		WithActionMask(ActionFlagIgnore).
+		WithFlags(FilterEnumFlagsSorted).
+		Execute()
+	if err != nil {
+		t.Fatal(err)
+	} else if len(rules) != 1 {
+		t.Fatalf("expected 1 rule in filter, but found %v", len(rules))
+	} else if rules[0].ID != RuleID(rule_id) {
+		t.Fatalf("wrong rule enumerated (expected %v; got %v)", rule_id, rules[0].ID)
+	}
+}

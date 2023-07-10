@@ -1,3 +1,4 @@
 includes/
 *.exe
 *.txt
+.envrc

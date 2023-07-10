@@ -536,20 +536,22 @@ func (m Match) String() string {
 // Action is an action the filtering engine can execute.
 type Action uint32
 
+// Flags which are applied to actions and can be filtered
+type ActionFlag uint32
+
 const (
-	// ActionBlock blocks a packet or session.
-	ActionBlock Action = 0x1001
-	// ActionPermit permits a packet or session.
-	ActionPermit Action = 0x1002
-	// ActionCalloutTerminating invokes a callout that must return a
-	// permit or block verdict.
-	ActionCalloutTerminating Action = 0x5003
-	// ActionCalloutInspection invokes a callout that is expected to
-	// not return a verdict (i.e. a read-only callout).
-	ActionCalloutInspection Action = 0x6004
-	// ActionCalloutUnknown invokes a callout that may return a permit
-	// or block verdict.
-	ActionCalloutUnknown Action = 0x4005
+	// Action Flags can be used in enumerations to restrict the type of rules to return
+	ActionFlagTerminating    ActionFlag = 0x1000     // only rules which must terminate evaluation
+	ActionFlagNonTerminating            = 0x2000     // only rules which cannot terminate evaluation
+	ActionFlagCallout                   = 0x4000     // any rules with a callout
+	ActionFlagIgnore                    = 0xFFFFFFFF // match any rule action
+
+	// pre-defined actions with appropriate action flags
+	ActionBlock              Action = (0x01 | Action(ActionFlagTerminating))                      // blocks a packet or session
+	ActionPermit                    = (0x02 | Action(ActionFlagTerminating))                      // permits a packet or session
+	ActionCalloutTerminating        = (0x03 | Action(ActionFlagCallout|ActionFlagTerminating))    // invokes a callout for permit/block
+	ActionCalloutInspection         = (0x04 | Action(ActionFlagCallout|ActionFlagNonTerminating)) // invokes a callout for inspection only
+	ActionCalloutUnknown            = (0x05 | Action(ActionFlagCallout))                          // invokes a callout which may return permit or block
 )
 
 // RuleID identifies a WFP filtering rule.
