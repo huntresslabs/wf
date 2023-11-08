@@ -7,6 +7,7 @@ package wf
 import (
 	"os"
 	"sort"
+	"syscall"
 	"testing"
 	"time"
 
@@ -110,10 +111,6 @@ func TestLayers(t *testing.T) {
 				{FieldArrivalInterfaceIndex, typeUint32},
 				{FieldArrivalInterfaceType, typeUint32},
 				{FieldArrivalTunnelType, typeUint32},
-				{FieldBitmapIPLocalAddress, typeBitmapIndex},
-				{FieldBitmapIPLocalPort, typeBitmapIndex},
-				{FieldBitmapIPRemoteAddress, typeBitmapIndex},
-				{FieldBitmapIPRemotePort, typeBitmapIndex},
 				{FieldCompartmentID, typeUint32},
 				{FieldCurrentProfileID, typeUint32},
 				{FieldFlags, typeUint32},
@@ -372,5 +369,275 @@ func TestFilter(t *testing.T) {
 		t.Fatalf("expected 1 rule in filter, but found %v", len(rules))
 	} else if rules[0].ID != RuleID(rule_id) {
 		t.Fatalf("wrong rule enumerated (expected %v; got %v)", rule_id, rules[0].ID)
+	}
+}
+
+func TestTransactionSessionClosed(t *testing.T) {
+	// Attempt to open a new WFP session
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        true,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+
+	status := s.TransactionStatus()
+	if status.Err != nil {
+		t.Fatalf("transaction err: %v", status.Err)
+	}
+	if status.State != BeganTransaction {
+		t.Fatalf("transaction in wrong state: %v", status.State.String())
+	}
+
+	// This should abort the transaction
+	s.Close()
+	status = s.TransactionStatus()
+	if status.Err != nil {
+		t.Fatalf("unexpected transaction err: %v", status.Err)
+	}
+	if status.State != AbortedTransaction {
+		t.Fatalf("transaction in wrong state: %v", status.State.String())
+	}
+
+	// We should not be able to commit a transaction
+	s.CommitTransaction()
+	status = s.TransactionStatus()
+	if status.Err != syscall.Errno(NilPointer) {
+		t.Fatalf("unexpected transaction err: %v", status.Err)
+	}
+	if status.State != AbortedTransaction {
+		t.Fatalf("Transaction in wrong state: %v", status.State.String())
+	}
+
+	// We should not be able to abort a transaction
+	s.AbortTransaction()
+	status = s.TransactionStatus()
+	if status.Err != syscall.Errno(NilPointer) {
+		t.Fatalf("unexpected transaction err: %v", status.Err)
+	}
+	if status.State != AbortedTransaction {
+		t.Fatalf("Transaction in wrong state: %v", status.State.String())
+	}
+}
+
+func TestTransactionNeverStarted(t *testing.T) {
+	// Attempt to open a new WFP session
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        false,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+
+	status := s.TransactionStatus()
+	if status.Err != nil {
+		t.Fatalf("transaction err: %v", status.Err)
+	}
+	if status.State != NoTransaction {
+		t.Fatalf("transaction in wrong state: %v", status.State.String())
+	}
+
+	// We should not be able to commit a transaction
+	s.CommitTransaction()
+	status = s.TransactionStatus()
+	if status.Err != syscall.Errno(NoTransactionInProgress) {
+		t.Fatalf("unexpected transaction err: %v", status.Err)
+	}
+	if status.State != NoTransaction {
+		t.Fatalf("Transaction in wrong state: %v", status.State.String())
+	}
+
+	// We should not be able to abort a transaction
+	s.AbortTransaction()
+	status = s.TransactionStatus()
+	if status.Err != syscall.Errno(NoTransactionInProgress) {
+		t.Fatalf("unexpected transaction err: %v", status.Err)
+	}
+	if status.State != NoTransaction {
+		t.Fatalf("Transaction in wrong state: %v", status.State.String())
+	}
+}
+
+func TestBlockedTransaction(t *testing.T) {
+	// Attempt to open a new WFP session
+	b, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        true,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+	defer func() {
+		b.Close()
+
+		if b.TransactionStatus().State != AbortedTransaction {
+			t.Fatal("Transaction should now be in the aborted state")
+		}
+	}()
+
+	status := b.TransactionStatus()
+	if status.Err != nil {
+		t.Fatalf("transaction err: %v", status.Err)
+	}
+	if status.State != BeganTransaction {
+		t.Fatalf("transaction in wrong state: %v", status.State.String())
+	}
+
+	// We know we're going to timeout, so keep Timeout value 1 millisecond
+	// DON'T SET IT TO ZERO, THE DEFAULT TIMEOUT IS VERY LONG
+	_, err = New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        false,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: time.Millisecond * 1,
+	})
+	if err != syscall.Errno(Timeout) {
+		t.Fatalf("unexpected transaction err: %v", err)
+	}
+}
+
+func TestBeginTransactionAlreadyInProgress(t *testing.T) {
+	// Create a session that is started in a transaction
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        true,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+	defer func() {
+		s.Close()
+
+		if s.TransactionStatus().State != AbortedTransaction {
+			t.Fatal("Transaction should now be in the aborted state")
+		}
+	}()
+
+	s.BeginTransaction(TransactionReadWrite)
+
+	if s.TransactionStatus().Err != syscall.Errno(TransactionInProgress) {
+		t.Fatal("Wrong error code.")
+	}
+}
+
+func TestTransactionCommitStarted(t *testing.T) {
+	// Create a session that is started in a transaction
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        true,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+	defer func() {
+		s.Close()
+
+		if s.TransactionStatus().State != CommittedTransaction {
+			t.Fatal("Transaction should now be in the committed state")
+		}
+	}()
+
+	if s.TransactionStatus().State != BeganTransaction {
+		t.Fatal("Could not begin transaction")
+	}
+
+	s.CommitTransaction()
+
+	if s.TransactionStatus().State != CommittedTransaction {
+		t.Fatal("Could not commit transaction")
+	}
+}
+
+func TestTransactionBeginCommit(t *testing.T) {
+	// Create a session that is started in a transaction
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        false,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+	defer func() {
+		s.Close()
+
+		if s.TransactionStatus().State != CommittedTransaction {
+			t.Fatal("Transaction should now be in the committed state")
+		}
+	}()
+
+	if s.TransactionStatus().State != NoTransaction {
+		t.Fatal("Should be in a non-transacted state")
+	}
+
+	s.BeginTransaction(TransactionReadWrite)
+
+	if s.TransactionStatus().State != BeganTransaction {
+		t.Fatal("Could not begin transaction")
+	}
+
+	s.CommitTransaction()
+
+	if s.TransactionStatus().State != CommittedTransaction {
+		t.Fatal("Could not commit transaction")
+	}
+}
+
+func TestTransactionAbort(t *testing.T) {
+	// Create a session that is started in a transaction
+	s, err := New(&Options{
+		Name:                    "huntress-isolation",
+		Description:             "Huntress Isolation Context Session",
+		Dynamic:                 false,
+		StartTransaction:        true,
+		TransactionFlags:        TransactionReadWrite,
+		TransactionStartTimeout: 15 * time.Second,
+	})
+	if err != nil {
+		t.Fatal("unable to start a new session")
+	}
+	defer func() {
+		s.Close()
+
+		if s.TransactionStatus().State != AbortedTransaction {
+			t.Fatal("Transaction should now be in the aborted state")
+		}
+	}()
+
+	if s.TransactionStatus().State != BeganTransaction {
+		t.Fatal("Could not begin transaction")
+	}
+
+	s.AbortTransaction()
+
+	if s.TransactionStatus().State != AbortedTransaction {
+		t.Fatal("Could not abort transaction")
 	}
 }

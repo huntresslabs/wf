@@ -23,6 +23,8 @@ type Session struct {
 	handle windows.Handle
 	// layerTypes is a map of layer ID -> field ID -> Go type for that field.
 	layerTypes layerTypes
+	// indicates if we are currently in a transaction
+	status TransactionStatus
 }
 
 // Options configures a Session.
@@ -43,6 +45,41 @@ type Options struct {
 	// wait to acquire the global transaction lock. If zero, WFP's
 	// default timeout (15 seconds) is used.
 	TransactionStartTimeout time.Duration
+	// StartTransaction indicates if we want to immediately start
+	// a transaction when the session begins
+	StartTransaction bool
+	// TransactionFlags indicate if we want read-only or read/write
+	// access
+	TransactionFlags TransactionFlag
+}
+
+// Util enum to track different states
+type TransactionState uint32
+
+const (
+	NoTransaction TransactionState = iota
+	BeganTransaction
+	AbortedTransaction
+	CommittedTransaction
+)
+
+var transactionStateMap map[TransactionState]string = map[TransactionState]string{
+	NoTransaction:        "No transaction requested",
+	BeganTransaction:     "Transaction was started",
+	AbortedTransaction:   "Transaction was aborted",
+	CommittedTransaction: "Transaction was committed",
+}
+
+func (ts TransactionState) String() string {
+	return transactionStateMap[ts]
+}
+
+// TransactionStatus tracks the last state our transaction was in.  If an error
+// occurs when calling a transaction function, this value is preserved along
+// with the error of transaction operatoin we were trying to perform.
+type TransactionStatus struct {
+	State TransactionState
+	Err   error
 }
 
 // New connects to the WFP API.
@@ -61,10 +98,15 @@ func New(opts *Options) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	ret := &Session{
 		handle:     handle,
 		layerTypes: layerTypes{},
+	}
+
+	if opts.StartTransaction {
+		// Don't worry if we return an error here. We're not going to fail
+		// the creation of the session if we can't start a transaction.
+		ret.BeginTransaction(opts.TransactionFlags)
 	}
 
 	// Populate the layer type cache.
@@ -89,6 +131,12 @@ func (s *Session) Close() error {
 	if s.handle == 0 {
 		return nil
 	}
+
+	// if we have a transaction in progress that was not commited, abort it now
+	if s.status.State == BeganTransaction {
+		s.AbortTransaction()
+	}
+
 	err := fwpmEngineClose0(s.handle)
 	s.handle = 0
 	return err
@@ -542,16 +590,23 @@ type ActionFlag uint32
 const (
 	// Action Flags can be used in enumerations to restrict the type of rules to return
 	ActionFlagTerminating    ActionFlag = 0x1000     // only rules which must terminate evaluation
-	ActionFlagNonTerminating            = 0x2000     // only rules which cannot terminate evaluation
-	ActionFlagCallout                   = 0x4000     // any rules with a callout
-	ActionFlagIgnore                    = 0xFFFFFFFF // match any rule action
+	ActionFlagNonTerminating ActionFlag = 0x2000     // only rules which cannot terminate evaluation
+	ActionFlagCallout        ActionFlag = 0x4000     // any rules with a callout
+	ActionFlagIgnore         ActionFlag = 0xFFFFFFFF // match any rule action
 
 	// pre-defined actions with appropriate action flags
-	ActionBlock              Action = (0x01 | Action(ActionFlagTerminating))                      // blocks a packet or session
-	ActionPermit                    = (0x02 | Action(ActionFlagTerminating))                      // permits a packet or session
-	ActionCalloutTerminating        = (0x03 | Action(ActionFlagCallout|ActionFlagTerminating))    // invokes a callout for permit/block
-	ActionCalloutInspection         = (0x04 | Action(ActionFlagCallout|ActionFlagNonTerminating)) // invokes a callout for inspection only
-	ActionCalloutUnknown            = (0x05 | Action(ActionFlagCallout))                          // invokes a callout which may return permit or block
+	ActionBlock              = (0x01 | Action(ActionFlagTerminating))                      // blocks a packet or session
+	ActionPermit             = (0x02 | Action(ActionFlagTerminating))                      // permits a packet or session
+	ActionCalloutTerminating = (0x03 | Action(ActionFlagCallout|ActionFlagTerminating))    // invokes a callout for permit/block
+	ActionCalloutInspection  = (0x04 | Action(ActionFlagCallout|ActionFlagNonTerminating)) // invokes a callout for inspection only
+	ActionCalloutUnknown     = (0x05 | Action(ActionFlagCallout))                          // invokes a callout which may return permit or block
+)
+
+type TransactionFlag uint32
+
+const (
+	TransactionReadWrite TransactionFlag = iota
+	TransactionReadOnly
 )
 
 // RuleID identifies a WFP filtering rule.
@@ -756,4 +811,41 @@ func (s *Session) getEventPage(enum windows.Handle) ([]*DropEvent, error) {
 	defer fwpmFreeMemory0((*struct{})(unsafe.Pointer(&array)))
 
 	return fromNetEvent1(array, num)
+}
+
+func (s *Session) BeginTransaction(p TransactionFlag) {
+	err := fwpmTransactionBegin0(s.handle, uint32(p))
+	if err == nil {
+		s.status.State = BeganTransaction
+		return
+	}
+
+	s.status.Err = err
+}
+
+func (s *Session) AbortTransaction() {
+	err := fwpmTransactionAbort0(s.handle)
+	if err == nil {
+		s.status.State = AbortedTransaction
+		return
+	}
+
+	s.status.Err = err
+}
+
+func (s *Session) CommitTransaction() {
+	err := fwpmTransactionCommit0(s.handle)
+	if err == nil {
+		s.status.State = CommittedTransaction
+		return
+	}
+
+	s.status.Err = err
+}
+
+// Returns the transaction status of the sesssion
+// May be called after Close() to get the fineal status
+// on the Close() call.
+func (s *Session) TransactionStatus() *TransactionStatus {
+	return &s.status
 }
