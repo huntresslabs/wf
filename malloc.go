@@ -24,10 +24,22 @@ type arena struct {
 }
 
 const slabSize = 4096
+const byteBoundary = 8
 
 // grow adds a new slab to the allocator and handles future calls to
 // alloc/calloc out of it.
 func (a *arena) grow() {
+	// LocalAlloc should allocate on at least 8-byte alignment for Windows
+	// from: https://learn.microsoft.com/en-us/windows/win32/memory/global-and-local-functions
+	//     ...the global and local functions are implemented as wrapper functions
+	//     that call the corresponding heap functions using a handle to the process's default heap.
+	// from: https://learn.microsoft.com/en-us/windows/win32/api/heapapi/nf-heapapi-heapalloc#remarks
+	//     The alignment of memory returned by HeapAlloc is MEMORY_ALLOCATION_ALIGNMENT in WinNT.h:
+	//         #if defined(_WIN64) || defined(_M_ALPHA)
+	//         #define MEMORY_ALLOCATION_ALIGNMENT 16
+	//         #else
+	//         #define MEMORY_ALLOCATION_ALIGNMENT 8
+	//         #endif
 	slab, err := windows.LocalAlloc(windows.LPTR, slabSize)
 	if err != nil {
 		panic(fmt.Sprintf("memory allocation failed: %v", err))
@@ -35,6 +47,16 @@ func (a *arena) grow() {
 	a.slabs = append(a.slabs, slab)
 	a.next = slab
 	a.remaining = slabSize
+}
+
+func (a *arena) align() {
+	// align address to boundary
+	offset := a.next % byteBoundary
+	if offset != 0 {
+		offset := byteBoundary - offset
+		a.next += offset
+		a.remaining -= offset
+	}
 }
 
 // Alloc returns an unsafe.Pointer to a zeroed range of length bytes.
@@ -45,6 +67,9 @@ func (a *arena) Alloc(length uintptr) unsafe.Pointer {
 	if length == 0 {
 		panic("can't allocate zero bytes")
 	}
+
+	a.align()
+
 	if length > a.remaining {
 		a.grow()
 	}
