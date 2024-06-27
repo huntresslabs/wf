@@ -526,11 +526,26 @@ func toFwpV6AddrAndMask(a *arena, pfx netip.Prefix) *fwpV6AddrAndMask {
 	return ret
 }
 
+func isSelfRelativeSD(s *windows.SECURITY_DESCRIPTOR) (bool, error) {
+	control, _, err := s.Control()
+	if err != nil {
+		return false, err
+	}
+
+	return control&windows.SE_SELF_RELATIVE != 0, nil
+}
+
 // toSecurityDescriptor returns an arena-allocated copy of s.
 func toSecurityDescriptor(a *arena, s *windows.SECURITY_DESCRIPTOR) (*windows.SECURITY_DESCRIPTOR, error) {
-	s, err := s.ToSelfRelative()
+	selfRelative, err := isSelfRelativeSD(s)
 	if err != nil {
 		return nil, err
+	}
+	if !selfRelative {
+		s, err = s.ToSelfRelative()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	sl := s.Length()
