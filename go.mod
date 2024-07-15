@@ -6,7 +6,7 @@ require (
 	github.com/google/go-cmp v0.5.5
 	github.com/peterbourgon/ff/v3 v3.0.0
 	go4.org/netipx v0.0.0-20220725152314-7e7bdc8411bf
-	golang.org/x/sys v0.0.0-20211019181941-9d821ace8654
+	golang.org/x/sys v0.22.0
 	honnef.co/go/tools v0.3.2
 )
 
